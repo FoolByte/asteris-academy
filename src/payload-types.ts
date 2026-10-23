@@ -69,7 +69,9 @@ export interface Config {
   collections: {
     users: User;
     media: Media;
+    news: News;
     'payload-kv': PayloadKv;
+    'payload-jobs': PayloadJob;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -78,24 +80,44 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    news: NewsSelect<false> | NewsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
+    'payload-jobs': PayloadJobsSelect<false> | PayloadJobsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
   };
   db: {
-    defaultIDType: string;
+    defaultIDType: number;
   };
   fallbackLocale: null;
-  globals: {};
-  globalsSelect: {};
+  globals: {
+    'site-settings': SiteSetting;
+    header: Header;
+    footer: Footer;
+    'home-content': HomeContent;
+    'home-page': HomePage;
+  };
+  globalsSelect: {
+    'site-settings': SiteSettingsSelect<false> | SiteSettingsSelect<true>;
+    header: HeaderSelect<false> | HeaderSelect<true>;
+    footer: FooterSelect<false> | FooterSelect<true>;
+    'home-content': HomeContentSelect<false> | HomeContentSelect<true>;
+    'home-page': HomePageSelect<false> | HomePageSelect<true>;
+  };
   locale: null;
   widgets: {
     collections: CollectionsWidget;
   };
   user: User;
   jobs: {
-    tasks: unknown;
+    tasks: {
+      schedulePublish: TaskSchedulePublish;
+      inline: {
+        input: unknown;
+        output: unknown;
+      };
+    };
     workflows: unknown;
   };
 }
@@ -122,7 +144,13 @@ export interface UserAuthOperations {
  * via the `definition` "users".
  */
 export interface User {
-  id: string;
+  id: number;
+  name?: string | null;
+  /**
+   * Upload foto profil pengguna.
+   */
+  avatar?: (number | null) | Media;
+  role: 'super-admin' | 'admin' | 'editor';
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -130,6 +158,7 @@ export interface User {
   resetPasswordExpiration?: string | null;
   salt?: string | null;
   hash?: string | null;
+  resetPasswordRequestedAt?: string | null;
   loginAttempts?: number | null;
   lockUntil?: string | null;
   sessions?:
@@ -147,8 +176,9 @@ export interface User {
  * via the `definition` "media".
  */
 export interface Media {
-  id: string;
+  id: number;
   alt: string;
+  _objectKey?: string | null;
   updatedAt: string;
   createdAt: string;
   url?: string | null;
@@ -162,11 +192,97 @@ export interface Media {
   focalY?: number | null;
 }
 /**
+ * Kelola berita, artikel, dan pengumuman.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "news".
+ */
+export interface News {
+  id: number;
+  /**
+   * Judul berita yang menarik, maksimal 150 karakter.
+   */
+  title: string;
+  /**
+   * Ringkasan singkat untuk kartu berita & hasil pencarian (maks. 300 karakter).
+   */
+  excerpt?: string | null;
+  /**
+   * Rekomendasi rasio 16:9, minimal 1200x675.
+   */
+  heroImage?: (number | null) | Media;
+  content: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  };
+  category: 'umum' | 'pengumuman' | 'kegiatan' | 'prestasi' | 'akademik' | 'event';
+  tags?:
+    | {
+        tag: string;
+        id?: string | null;
+      }[]
+    | null;
+  gallery?:
+    | {
+        image: number | Media;
+        caption?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  relatedNews?: (number | News)[] | null;
+  meta?: {
+    /**
+     * Kosongkan untuk memakai judul berita. Ideal ≤ 60 karakter.
+     */
+    title?: string | null;
+    /**
+     * Ideal 120–160 karakter.
+     */
+    description?: string | null;
+    /**
+     * Kosongkan untuk memakai gambar utama.
+     */
+    image?: (number | null) | Media;
+  };
+  /**
+   * Otomatis dari judul, bisa diubah manual.
+   */
+  slug?: string | null;
+  /**
+   * Otomatis terisi saat dipublikasikan.
+   */
+  publishedAt?: string | null;
+  author?: (number | null) | User;
+  /**
+   * Tampilkan di bagian utama beranda.
+   */
+  featured?: boolean | null;
+  /**
+   * Dihitung otomatis dari isi berita.
+   */
+  readingTime?: number | null;
+  views?: number | null;
+  updatedAt: string;
+  createdAt: string;
+  _status?: ('draft' | 'published') | null;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
-  id: string;
+  id: number;
   key: string;
   data:
     | {
@@ -180,23 +296,119 @@ export interface PayloadKv {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs".
+ */
+export interface PayloadJob {
+  id: number;
+  /**
+   * Input data provided to the job
+   */
+  input?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  taskStatus?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  completedAt?: string | null;
+  totalTried?: number | null;
+  /**
+   * If hasError is true this job will not be retried
+   */
+  hasError?: boolean | null;
+  /**
+   * If hasError is true, this is the error that caused it
+   */
+  error?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Task execution log
+   */
+  log?:
+    | {
+        executedAt: string;
+        completedAt: string;
+        taskSlug: 'inline' | 'schedulePublish';
+        taskID: string;
+        input?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        output?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        state: 'failed' | 'succeeded';
+        error?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        id?: string | null;
+      }[]
+    | null;
+  taskSlug?: ('inline' | 'schedulePublish') | null;
+  queue?: string | null;
+  waitUntil?: string | null;
+  processing?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
 export interface PayloadLockedDocument {
-  id: string;
+  id: number;
   document?:
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null)
     | ({
         relationTo: 'media';
-        value: string | Media;
+        value: number | Media;
+      } | null)
+    | ({
+        relationTo: 'news';
+        value: number | News;
       } | null);
   globalSlug?: string | null;
   user: {
     relationTo: 'users';
-    value: string | User;
+    value: number | User;
   };
   updatedAt: string;
   createdAt: string;
@@ -206,10 +418,10 @@ export interface PayloadLockedDocument {
  * via the `definition` "payload-preferences".
  */
 export interface PayloadPreference {
-  id: string;
+  id: number;
   user: {
     relationTo: 'users';
-    value: string | User;
+    value: number | User;
   };
   key?: string | null;
   value?:
@@ -229,7 +441,7 @@ export interface PayloadPreference {
  * via the `definition` "payload-migrations".
  */
 export interface PayloadMigration {
-  id: string;
+  id: number;
   name?: string | null;
   batch?: number | null;
   updatedAt: string;
@@ -240,6 +452,9 @@ export interface PayloadMigration {
  * via the `definition` "users_select".
  */
 export interface UsersSelect<T extends boolean = true> {
+  name?: T;
+  avatar?: T;
+  role?: T;
   updatedAt?: T;
   createdAt?: T;
   email?: T;
@@ -247,6 +462,7 @@ export interface UsersSelect<T extends boolean = true> {
   resetPasswordExpiration?: T;
   salt?: T;
   hash?: T;
+  resetPasswordRequestedAt?: T;
   loginAttempts?: T;
   lockUntil?: T;
   sessions?:
@@ -263,6 +479,7 @@ export interface UsersSelect<T extends boolean = true> {
  */
 export interface MediaSelect<T extends boolean = true> {
   alt?: T;
+  _objectKey?: T;
   updatedAt?: T;
   createdAt?: T;
   url?: T;
@@ -277,11 +494,83 @@ export interface MediaSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "news_select".
+ */
+export interface NewsSelect<T extends boolean = true> {
+  title?: T;
+  excerpt?: T;
+  heroImage?: T;
+  content?: T;
+  category?: T;
+  tags?:
+    | T
+    | {
+        tag?: T;
+        id?: T;
+      };
+  gallery?:
+    | T
+    | {
+        image?: T;
+        caption?: T;
+        id?: T;
+      };
+  relatedNews?: T;
+  meta?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        image?: T;
+      };
+  slug?: T;
+  publishedAt?: T;
+  author?: T;
+  featured?: T;
+  readingTime?: T;
+  views?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  _status?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv_select".
  */
 export interface PayloadKvSelect<T extends boolean = true> {
   key?: T;
   data?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs_select".
+ */
+export interface PayloadJobsSelect<T extends boolean = true> {
+  input?: T;
+  taskStatus?: T;
+  completedAt?: T;
+  totalTried?: T;
+  hasError?: T;
+  error?: T;
+  log?:
+    | T
+    | {
+        executedAt?: T;
+        completedAt?: T;
+        taskSlug?: T;
+        taskID?: T;
+        input?: T;
+        output?: T;
+        state?: T;
+        error?: T;
+        id?: T;
+      };
+  taskSlug?: T;
+  queue?: T;
+  waitUntil?: T;
+  processing?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -317,6 +606,647 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site-settings".
+ */
+export interface SiteSetting {
+  id: number;
+  logo: number | Media;
+  siteName: string;
+  /**
+   * Dipakai bersama oleh Navbar dan Footer.
+   */
+  navigation?:
+    | {
+        link: {
+          type: 'anchor' | 'internal' | 'external' | 'whatsapp';
+          label: string;
+          /**
+           * Tanpa tanda #, contoh: kurikulum
+           */
+          anchor?: string | null;
+          /**
+           * Contoh: /galeri
+           */
+          path?: string | null;
+          /**
+           * Contoh: https://example.com
+           */
+          url?: string | null;
+          /**
+           * Pesan awal WhatsApp (opsional). Nomor diambil dari Pengaturan Situs.
+           */
+          waMessage?: string | null;
+          newTab?: boolean | null;
+        };
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "header".
+ */
+export interface Header {
+  id: number;
+  cta?: {
+    link?: {
+      type?: ('anchor' | 'internal' | 'external' | 'whatsapp') | null;
+      label?: string | null;
+      /**
+       * Tanpa tanda #, contoh: kurikulum
+       */
+      anchor?: string | null;
+      /**
+       * Contoh: /galeri
+       */
+      path?: string | null;
+      /**
+       * Contoh: https://example.com
+       */
+      url?: string | null;
+      /**
+       * Pesan awal WhatsApp (opsional). Nomor diambil dari Pengaturan Situs.
+       */
+      waMessage?: string | null;
+      newTab?: boolean | null;
+    };
+  };
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "footer".
+ */
+export interface Footer {
+  id: number;
+  schoolInfo: {
+    description: string;
+    accreditation: string;
+  };
+  contactInfo: {
+    address: string;
+    email: string;
+    phone: string;
+  };
+  communication: {
+    description: string;
+    whatsappUrl?: string | null;
+    whatsappLabel?: string | null;
+  };
+  bottomBar?: {
+    /**
+     * Kosongkan untuk teks otomatis dari nama sekolah & tahun berjalan.
+     */
+    copyright?: string | null;
+    legalLinks?:
+      | {
+          link: {
+            type: 'anchor' | 'internal' | 'external' | 'whatsapp';
+            label: string;
+            /**
+             * Tanpa tanda #, contoh: kurikulum
+             */
+            anchor?: string | null;
+            /**
+             * Contoh: /galeri
+             */
+            path?: string | null;
+            /**
+             * Contoh: https://example.com
+             */
+            url?: string | null;
+            /**
+             * Pesan awal WhatsApp (opsional). Nomor diambil dari Pengaturan Situs.
+             */
+            waMessage?: string | null;
+            newTab?: boolean | null;
+          };
+          id?: string | null;
+        }[]
+      | null;
+  };
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "home-content".
+ */
+export interface HomeContent {
+  id: number;
+  /**
+   * Contoh: Pendidikan Berkarakter Berbasis Teknologi
+   */
+  heroHeadline: string;
+  heroSubtext: string;
+  /**
+   * Upload video drone atau gambar resolusi tinggi
+   */
+  heroBackgroundMedia?: (number | null) | Media;
+  heroCtaText: string;
+  heroCtaLink: string;
+  aboutTitle: string;
+  aboutDescription: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  };
+  aboutImage?: (number | null) | Media;
+  establishedYear: number;
+  vision: string;
+  missions: {
+    missionStatement: string;
+    id?: string | null;
+  }[];
+  modernFeatures?:
+    | {
+        title: string;
+        description: string;
+        /**
+         * Nama icon lucide-react (ex: QrCode, Laptop, Wallet)
+         */
+        icon?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  schoolStats?:
+    | {
+        /**
+         * Ex: Siswa Aktif
+         */
+        label: string;
+        value: number;
+        /**
+         * Ex: + (hasil: 750+)
+         */
+        suffix?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "home-page".
+ */
+export interface HomePage {
+  id: number;
+  sections?:
+    | (
+        | {
+            eyebrow?: string | null;
+            title: string;
+            description?: string | null;
+            image: number | Media;
+            imageAlt: string;
+            /**
+             * Pilih icon Hugeicons yang akan ditampilkan pada UI
+             */
+            iconName: string;
+            imageBadge?: string | null;
+            primaryButton?: {
+              label?: string | null;
+              url?: string | null;
+            };
+            secondaryButton?: {
+              label?: string | null;
+              url?: string | null;
+            };
+            trustIndicators?:
+              | {
+                  text: string;
+                  id?: string | null;
+                }[]
+              | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'hero';
+          }
+        | {
+            title: string;
+            subtitle?: string | null;
+            button?: {
+              label?: string | null;
+              url?: string | null;
+            };
+            /**
+             * Tambahkan kartu fitur yang akan tampil di bawah judul utama.
+             */
+            cards?:
+              | {
+                  /**
+                   * Pilih icon Hugeicons yang akan ditampilkan pada UI
+                   */
+                  iconName: string;
+                  /**
+                   * Pilih warna latar belakang card
+                   */
+                  backgroundColor:
+                    'bg-red-200' | 'bg-yellow-200' | 'bg-green-200' | 'bg-blue-200' | 'bg-purple-200' | 'bg-slate-100';
+                  title: string;
+                  description: string;
+                  id?: string | null;
+                }[]
+              | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'features';
+          }
+        | {
+            eyebrow: string;
+            title: string;
+            subtitle?: string | null;
+            /**
+             * Tambahkan kartu Kurikulum per Tingkat Kelas.
+             */
+            cardsGrade?:
+              | {
+                  eyebrow: string;
+                  title: string;
+                  description: string;
+                  id?: string | null;
+                }[]
+              | null;
+            /**
+             * Tambahkan kartu fitur keunggulan metode pengajaran yang diterapkan.
+             */
+            cardsHighlights?:
+              | {
+                  /**
+                   * Pilih icon Hugeicons yang akan ditampilkan pada UI
+                   */
+                  iconName: string;
+                  /**
+                   * Pilih warna latar belakang card
+                   */
+                  backgroundColor:
+                    'bg-red-200' | 'bg-yellow-200' | 'bg-green-200' | 'bg-blue-200' | 'bg-purple-200' | 'bg-slate-100';
+                  title: string;
+                  description: string;
+                  id?: string | null;
+                }[]
+              | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'curriculum';
+          }
+        | {
+            eyebrow: string;
+            title: string;
+            subtitle?: string | null;
+            /**
+             * Tambahkan kartu profil instruktur/pengajar
+             */
+            cards?:
+              | {
+                  image: number | Media;
+                  /**
+                   * Contoh: Cambridge Mathematics & CT Lead
+                   */
+                  tag: string;
+                  name: string;
+                  /**
+                   * Gelar dan sertifikasi
+                   */
+                  qualifications: string;
+                  description: string;
+                  id?: string | null;
+                }[]
+              | null;
+            highlights?:
+              | {
+                  /**
+                   * Pilih icon Hugeicons yang akan ditampilkan pada UI
+                   */
+                  iconName: string;
+                  text: string;
+                  id?: string | null;
+                }[]
+              | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'instructure';
+          }
+      )[]
+    | null;
+  facilities: {
+    eyebrow: string;
+    title: string;
+    subtitle: string;
+    galleryItems?:
+      | {
+          /**
+           * Pilih icon Hugeicons yang akan ditampilkan pada UI
+           */
+          iconName: string;
+          image: number | Media;
+          /**
+           * Contoh: Lab Sains & IoT, Digital Library, Olahraga & Seni
+           */
+          category: string;
+          title: string;
+          description?: string | null;
+          id?: string | null;
+        }[]
+      | null;
+  };
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site-settings_select".
+ */
+export interface SiteSettingsSelect<T extends boolean = true> {
+  logo?: T;
+  siteName?: T;
+  navigation?:
+    | T
+    | {
+        link?:
+          | T
+          | {
+              type?: T;
+              label?: T;
+              anchor?: T;
+              path?: T;
+              url?: T;
+              waMessage?: T;
+              newTab?: T;
+            };
+        id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "header_select".
+ */
+export interface HeaderSelect<T extends boolean = true> {
+  cta?:
+    | T
+    | {
+        link?:
+          | T
+          | {
+              type?: T;
+              label?: T;
+              anchor?: T;
+              path?: T;
+              url?: T;
+              waMessage?: T;
+              newTab?: T;
+            };
+      };
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "footer_select".
+ */
+export interface FooterSelect<T extends boolean = true> {
+  schoolInfo?:
+    | T
+    | {
+        description?: T;
+        accreditation?: T;
+      };
+  contactInfo?:
+    | T
+    | {
+        address?: T;
+        email?: T;
+        phone?: T;
+      };
+  communication?:
+    | T
+    | {
+        description?: T;
+        whatsappUrl?: T;
+        whatsappLabel?: T;
+      };
+  bottomBar?:
+    | T
+    | {
+        copyright?: T;
+        legalLinks?:
+          | T
+          | {
+              link?:
+                | T
+                | {
+                    type?: T;
+                    label?: T;
+                    anchor?: T;
+                    path?: T;
+                    url?: T;
+                    waMessage?: T;
+                    newTab?: T;
+                  };
+              id?: T;
+            };
+      };
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "home-content_select".
+ */
+export interface HomeContentSelect<T extends boolean = true> {
+  heroHeadline?: T;
+  heroSubtext?: T;
+  heroBackgroundMedia?: T;
+  heroCtaText?: T;
+  heroCtaLink?: T;
+  aboutTitle?: T;
+  aboutDescription?: T;
+  aboutImage?: T;
+  establishedYear?: T;
+  vision?: T;
+  missions?:
+    | T
+    | {
+        missionStatement?: T;
+        id?: T;
+      };
+  modernFeatures?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        icon?: T;
+        id?: T;
+      };
+  schoolStats?:
+    | T
+    | {
+        label?: T;
+        value?: T;
+        suffix?: T;
+        id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "home-page_select".
+ */
+export interface HomePageSelect<T extends boolean = true> {
+  sections?:
+    | T
+    | {
+        hero?:
+          | T
+          | {
+              eyebrow?: T;
+              title?: T;
+              description?: T;
+              image?: T;
+              imageAlt?: T;
+              iconName?: T;
+              imageBadge?: T;
+              primaryButton?:
+                | T
+                | {
+                    label?: T;
+                    url?: T;
+                  };
+              secondaryButton?:
+                | T
+                | {
+                    label?: T;
+                    url?: T;
+                  };
+              trustIndicators?:
+                | T
+                | {
+                    text?: T;
+                    id?: T;
+                  };
+              id?: T;
+              blockName?: T;
+            };
+        features?:
+          | T
+          | {
+              title?: T;
+              subtitle?: T;
+              button?:
+                | T
+                | {
+                    label?: T;
+                    url?: T;
+                  };
+              cards?:
+                | T
+                | {
+                    iconName?: T;
+                    backgroundColor?: T;
+                    title?: T;
+                    description?: T;
+                    id?: T;
+                  };
+              id?: T;
+              blockName?: T;
+            };
+        curriculum?:
+          | T
+          | {
+              eyebrow?: T;
+              title?: T;
+              subtitle?: T;
+              cardsGrade?:
+                | T
+                | {
+                    eyebrow?: T;
+                    title?: T;
+                    description?: T;
+                    id?: T;
+                  };
+              cardsHighlights?:
+                | T
+                | {
+                    iconName?: T;
+                    backgroundColor?: T;
+                    title?: T;
+                    description?: T;
+                    id?: T;
+                  };
+              id?: T;
+              blockName?: T;
+            };
+        instructure?:
+          | T
+          | {
+              eyebrow?: T;
+              title?: T;
+              subtitle?: T;
+              cards?:
+                | T
+                | {
+                    image?: T;
+                    tag?: T;
+                    name?: T;
+                    qualifications?: T;
+                    description?: T;
+                    id?: T;
+                  };
+              highlights?:
+                | T
+                | {
+                    iconName?: T;
+                    text?: T;
+                    id?: T;
+                  };
+              id?: T;
+              blockName?: T;
+            };
+      };
+  facilities?:
+    | T
+    | {
+        eyebrow?: T;
+        title?: T;
+        subtitle?: T;
+        galleryItems?:
+          | T
+          | {
+              iconName?: T;
+              image?: T;
+              category?: T;
+              title?: T;
+              description?: T;
+              id?: T;
+            };
+      };
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "collections_widget".
  */
 export interface CollectionsWidget {
@@ -324,6 +1254,26 @@ export interface CollectionsWidget {
     [k: string]: unknown;
   };
   width: 'full';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskSchedulePublish".
+ */
+export interface TaskSchedulePublish {
+  input: {
+    type?: ('publish' | 'unpublish') | null;
+    locale?: string | null;
+    doc?: {
+      relationTo: 'news';
+      value: number | News;
+    } | null;
+    global?: string | null;
+    user?: {
+      relationTo: 'users';
+      value: number | User;
+    } | null;
+  };
+  output?: unknown;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
